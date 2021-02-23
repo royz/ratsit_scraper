@@ -6,16 +6,19 @@ from bs4 import BeautifulSoup
 import os
 import glob
 import openpyxl
+import time
 
 BASE_DIR = os.path.dirname(__file__)
+CACHE_PATH = os.path.join(BASE_DIR, 'cache.json')
 
 
 class Ratsit:
     def __init__(self):
         self.session = None
         self.cache = None
-        self.file_name = None
-        self.input = None
+        self.cache_written_at = 0
+        self.read_cache()
+        self.init_session()
 
     def init_session(self):
         self.session = requests.session()
@@ -68,11 +71,11 @@ class Ratsit:
             return self.get_details(
                 'https://www.ratsit.se' +
                 soup.find('div', {'class': 'search-list-item'}).find('a')['href']
-            )
+                , person_hash)
         except:
             return None
 
-    def get_details(self, url):
+    def get_details(self, url, person_hash):
         response = self.session.get(url)
         soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -95,6 +98,11 @@ class Ratsit:
         except:
             pass
         data.update({'living_with': persons_living_with})
+
+        # add the data into cache
+        self.cache[person_hash] = data
+        # save the cache into a file
+        self.write_cache()
 
         return data
 
@@ -145,10 +153,10 @@ class Ratsit:
         return f'{first_name}-{last_name}-{person_number}'
 
     def read_cache(self):
-        cache_path = os.path.join(BASE_DIR, 'cache.json')
-        if os.path.exists(cache_path):
+
+        if os.path.exists(CACHE_PATH):
             try:
-                with open(cache_path, encoding='utf-8') as f:
+                with open(CACHE_PATH, encoding='utf-8') as f:
                     self.cache = json.load(f)
             except:
                 self.cache = {}
@@ -156,11 +164,57 @@ class Ratsit:
             self.cache = {}
 
     def write_cache(self):
+        # write the cache every 60 seconds
+        if time.time() < self.cache_written_at + 60:
+            return
+
+        with open(CACHE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(self.cache, f, indent=2)
+
+
+class Excel:
+    def __init__(self):
+        self.file_name = None
+        self.file_path = None
+        self.input = []
+        self.output = []
+
+    def read_input(self):
+        files = glob.glob(os.path.join(BASE_DIR, '*.xlsx'))
+        file_names = [file.split(os.path.sep)[-1] for file in files]
+        print('choose a file:')
+        for i, file in enumerate(file_names):
+            print(f'{i + 1}. {file}')
+        try:
+            idx = int(input('file number: ')) - 1
+            self.file_name = file_names[idx]
+            self.file_path = files[idx]
+
+            # read the data
+            workbook = openpyxl.load_workbook(self.file_path)
+            sheet = workbook.active
+            for i, row in enumerate(sheet.iter_rows()):
+                if i == 0:
+                    continue
+
+                self.input.append({
+                    'row': i,
+                    'first_name': row[1].value,
+                    'last_name': row[2].value,
+                    'person_number': row[0].value,
+                })
+        except:
+            print('the file does not exist')
+            quit()
+
+    def write_data(self, data):
         pass
 
 
 if __name__ == '__main__':
     ratsit = Ratsit()
-    ratsit.init_session()
-    result = ratsit.search('Johanna', 'Hallberg', '19720111')
-    ratsit.print_details(result)
+    excel = Excel()
+    excel.read_input()
+
+    # result = ratsit.search('Johanna', 'Hallberg', '19720111')
+    # ratsit.print_details(result)
