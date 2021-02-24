@@ -7,6 +7,8 @@ import os
 import glob
 import openpyxl
 import time
+import colorama
+from termcolor import colored
 
 BASE_DIR = os.path.dirname(__file__)
 CACHE_PATH = os.path.join(BASE_DIR, 'cache.json')
@@ -16,7 +18,7 @@ class Ratsit:
     def __init__(self):
         self.session = None
         self.cache = None
-        self.cache_written_at = 0
+        self.cache_written_at = time.time()
         self.read_cache()
         self.init_session()
 
@@ -62,32 +64,53 @@ class Ratsit:
             'HarBolagsengagemang': 'true',
             'HarEjBolagsengagemang': 'true',
             'page': '1',
-            'clientQueryId': '1'
+            'clientQueryId': '1',
+            # '__RequestVerificationToken': 'CfDJ8P4iE6Tn9_pNpneMwmvxK-KPz2338qh-yda_7C-FxC1HQWr-9v6K48L20HkNf-v7dKN2I1TSHZN10nPvYBEj7RhiP2trWv5yMvAiGlqgFxNz6upRQN08gqUqCKR7DbClnjz4KujvXH1BrFDUde-FBtc'
         }
         try:
-            response = self.session.post('https://www.ratsit.se/Sok/SokPersonPartial', data=data)
+            response = self.session.post('https://www.ratsit.se/Sok/SokPersonPartial', data=data, timeout=10)
             primary = response.json()['htmlPrimary']
+
+            # with open('index.html', 'w', encoding='utf-8') as f:
+            #     f.write(primary.strip())
+
             soup = BeautifulSoup(primary, 'html.parser')
-            return self.get_details(
-                'https://www.ratsit.se' +
-                soup.find('div', {'class': 'search-list-item'}).find('a')['href']
-                , person_hash)
+            url = 'https://www.ratsit.se' + soup.find('div', {'class': 'search-list-item'}).find('a')['href']
+            # print(url)
+            return self.get_details(url, person_hash)
         except:
             return None
 
     def get_details(self, url, person_hash):
-        response = self.session.get(url)
+        response = self.session.get(url, timeout=10)
+
+        # with open('details.html', 'w', encoding='utf-8') as f:
+        #     f.write(response.text)
+
         soup = BeautifulSoup(response.text, 'html.parser')
 
         # get the address and phone number
-        data = self.find_address(response.text)
+        data = self.find_address(soup)
+        data.update({'url': url})
 
-        # get company name
+        # get all company names
         try:
-            company = soup.find('span', {'class': 'engagement-company'}).text.strip()
+            company_spans = soup.find_all('span', {'class': 'engagement-company'})
+            companies = [company_span.text.strip() for company_span in company_spans]
+            companies = list(set(companies))
         except:
-            company = None
-        data.update({'company': company})
+            companies = []
+        data.update({'companies': companies})
+
+        # get businesses
+        try:
+            business_table = soup.find('div', {'id': 'foretagPaAdressenLista'})
+            table_rows = business_table.find_all('tr')[1:]
+            businesses = [business.find('a').text.strip() for business in table_rows]
+        except Exception as e:
+            businesses = []
+
+        data.update({'businesses': businesses})
 
         # get a list of persons they are living with
         persons_living_with = []
@@ -110,36 +133,65 @@ class Ratsit:
     def print_details(details):
         address = details.get('address')
         phone = details.get('phone')
-        company = details.get('company')
+        companies = details.get('companies')
+        businesses = details.get('businesses')
         living_with = details.get('living_with')
 
         if address:
-            print(f"address: {address['street']}, {address['locality']}, {address['zip']}")
+            print(colored(f"address: {address['street']}, {address['locality']}, {address['zip']}", 'green'))
+        else:
+            print(colored('address: not found', 'yellow'))
+
         if len(living_with) > 0:
-            print('living with: ' + '\n             '.join(living_with))
+            print(colored(f'living with: {join_list(living_with)}', 'green'))
+        else:
+            print(colored('living with: not found', 'yellow'))
+
         if phone:
-            print(f"phone: {phone}")
-        if company:
-            print(f"company: {company}")
+            print(colored(f"phone: {phone}", 'green'))
+        else:
+            print(colored('phone: not found', 'yellow'))
+
+        if len(companies) > 0:
+            print(colored(f"companies: {join_list(companies)}", 'green'))
+        else:
+            print(colored('company: not found', 'yellow'))
+
+        if len(businesses) > 0:
+            print(colored(f"businesses: {join_list(businesses)}", 'green'))
+        else:
+            print(colored('business: not found', 'yellow'))
 
     @staticmethod
-    def find_address(text):
+    def find_address(soup):
+        new_data = {'address': None, 'phone': None}
         try:
-            match = ''.join((re.findall(r'(\[{"@context)(.*)(}])', text)[0]))
-            json_data = json.loads(match)
+            data = soup.find('script', {'type': 'application/ld+json'}).text
+            # print(data)
+            json_data = json.loads(data)
             for res in json_data:
-                if 'address' in res:
-                    return {
-                        'address': {
+                # if address already not found and address is present in current data
+                if not new_data['address'] and 'address' in res:
+                    # get the address
+                    try:
+                        new_data['address'] = {
                             'country': res['address']['addressCountry'],
                             'locality': res['address']['addressLocality'],
                             'zip': res['address']['postalCode'],
                             'street': res['address']['streetAddress']
-                        },
-                        'phone': res['telephone'],
-                    }
+                        }
+                    except:
+                        pass
+
+                    # get the phone number
+                    try:
+                        new_data['phone'] = res['telephone']
+                    except:
+                        pass
         except:
-            return {'address': None, 'phone': None}
+            pass
+
+        return new_data
 
     @staticmethod
     def get_hash(first_name, last_name, person_number):
@@ -170,6 +222,14 @@ class Ratsit:
 
         with open(CACHE_PATH, 'w', encoding='utf-8') as f:
             json.dump(self.cache, f, indent=2)
+
+
+class Cell:
+    address = 4
+    zip = 5
+    city = 6
+    phone = 7
+    info = 10
 
 
 class Excel:
@@ -207,14 +267,68 @@ class Excel:
             print('the file does not exist')
             quit()
 
-    def write_data(self, data):
-        pass
+    def write_data(self):
+        workbook = openpyxl.load_workbook(self.file_path)
+        sheet = workbook.active
+
+        for row in self.output:
+            info = ''
+            if len(row['living_with']) > 0:
+                info += f'living with: {join_list(row["living_with"])}\n'
+            if len(row['companies']) > 0:
+                info += f'companies: {join_list(row["companies"])}\n'
+            if len(row['businesses']) > 0:
+                info += f'businesses: {join_list(row["businesses"])}'
+
+            sheet.cell(row=row['row'], column=Cell.info).value = info.strip()
+            sheet.cell(row=row['row'], column=Cell.address).value = row['address']['street']
+            sheet.cell(row=row['row'], column=Cell.zip).value = row['address']['zip']
+            sheet.cell(row=row['row'], column=Cell.city).value = row['address']['locality']
+            sheet.cell(row=row['row'], column=Cell.phone).value = row['phone']
+
+        workbook.save(self.file_path)
+        print(colored(f'data saved in {self.file_name}', 'green'))
+
+
+def join_list(_list: list) -> str:
+    _list = [item if ',' not in item else f'"{item}"' for item in _list]
+    _list = list(map(lambda x: x.replace('\n', '').replace('  ', ' '), _list))
+    return ', '.join(_list)
 
 
 if __name__ == '__main__':
+    colorama.init()
+
     ratsit = Ratsit()
     excel = Excel()
     excel.read_input()
 
-    # result = ratsit.search('Johanna', 'Hallberg', '19720111')
-    # ratsit.print_details(result)
+    for i, person in enumerate(excel.input):
+        if not person["first_name"] and not person["last_name"] and not person["person_number"]:
+            break
+
+        print(colored(f'[{i + 1}/{len(excel.input)}] {person["first_name"]} '
+                      f'{person["last_name"]} ({person["person_number"]}) '
+                      f''.ljust(100, '-'), 'blue'))
+        result = ratsit.search(
+            person['first_name'],
+            person['last_name'],
+            person['person_number'],
+        )
+        if not result:
+            print(colored('no results found', 'red'))
+            continue
+
+        output = result
+        output.update({'row': person['row'] + 1})
+
+        ratsit.print_details(result)
+
+        # add the data to be written to excel
+        excel.output.append(output)
+
+    # write the data into cache
+    ratsit.write_cache()
+
+    # save the data to the excel file
+    excel.write_data()
