@@ -281,10 +281,13 @@ class Excel:
                 info += f'businesses: {join_list(row["businesses"])}'
 
             sheet.cell(row=row['row'], column=Cell.info).value = info.strip()
-            sheet.cell(row=row['row'], column=Cell.address).value = row['address']['street']
-            sheet.cell(row=row['row'], column=Cell.zip).value = row['address']['zip']
-            sheet.cell(row=row['row'], column=Cell.city).value = row['address']['locality']
-            sheet.cell(row=row['row'], column=Cell.phone).value = row['phone']
+
+            if row.get('address'):
+                sheet.cell(row=row['row'], column=Cell.address).value = row['address']['street']
+                sheet.cell(row=row['row'], column=Cell.zip).value = row['address']['zip']
+                sheet.cell(row=row['row'], column=Cell.city).value = row['address']['locality']
+            if row.get('phone'):
+                sheet.cell(row=row['row'], column=Cell.phone).value = row['phone']
 
         workbook.save(self.file_path)
         print(colored(f'data saved in {self.file_name}', 'green'))
