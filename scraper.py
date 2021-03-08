@@ -9,6 +9,7 @@ import openpyxl
 import time
 import colorama
 from termcolor import colored
+from requests.exceptions import ReadTimeout
 
 BASE_DIR = os.path.dirname(__file__)
 CACHE_PATH = os.path.join(BASE_DIR, 'cache.json')
@@ -24,7 +25,7 @@ class Ratsit:
 
     def init_session(self):
         self.session = requests.session()
-        self.session.headers = headers = {
+        self.session.headers = {
             'authority': 'www.ratsit.se',
             'accept': '*/*',
             'x-requested-with': 'XMLHttpRequest',
@@ -65,24 +66,30 @@ class Ratsit:
             'HarEjBolagsengagemang': 'true',
             'page': '1',
             'clientQueryId': '1',
-            # '__RequestVerificationToken': 'CfDJ8P4iE6Tn9_pNpneMwmvxK-KPz2338qh-yda_7C-FxC1HQWr-9v6K48L20HkNf-v7dKN2I1TSHZN10nPvYBEj7RhiP2trWv5yMvAiGlqgFxNz6upRQN08gqUqCKR7DbClnjz4KujvXH1BrFDUde-FBtc'
         }
         try:
             response = self.session.post('https://www.ratsit.se/Sok/SokPersonPartial', data=data, timeout=10)
-            primary = response.json()['htmlPrimary']
 
             # with open('index.html', 'w', encoding='utf-8') as f:
             #     f.write(primary.strip())
+        except ReadTimeout:
+            print('request timed out (2). retrying...')
+            return self.search(first_name, last_name, person_number)
 
+        try:
+            primary = response.json()['htmlPrimary']
             soup = BeautifulSoup(primary, 'html.parser')
             url = 'https://www.ratsit.se' + soup.find('div', {'class': 'search-list-item'}).find('a')['href']
-            # print(url)
             return self.get_details(url, person_hash)
         except:
             return None
 
     def get_details(self, url, person_hash):
-        response = self.session.get(url, timeout=10)
+        try:
+            response = requests.get(url, timeout=10)
+        except ReadTimeout:
+            print('request timed out (1). retrying...')
+            return self.get_details(url, person_hash)
 
         # with open('details.html', 'w', encoding='utf-8') as f:
         #     f.write(response.text)

@@ -2,6 +2,7 @@ from pprint import pprint
 import json
 import requests
 from bs4 import BeautifulSoup
+from requests.exceptions import ReadTimeout
 
 
 def find_address(soup):
@@ -36,7 +37,11 @@ def find_address(soup):
 
 
 def get_details(url):
-    response = requests.get(url, timeout=10)
+    try:
+        response = requests.get(url, timeout=10)
+    except ReadTimeout:
+        print('request timed out. retrying...')
+        return get_details(url)
 
     # with open('details.html', 'w', encoding='utf-8') as f:
     #     f.write(response.text)
