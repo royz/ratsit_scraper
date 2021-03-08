@@ -166,9 +166,8 @@ class Ratsit:
     def find_address(soup):
         new_data = {'address': None, 'phone': None}
         try:
-            data = soup.find('script', {'type': 'application/ld+json'}).text
-            # print(data)
-            json_data = json.loads(data)
+            data = soup.find('script', {'type': 'application/ld+json'})
+            json_data = json.loads(next(data.children).strip())
             for res in json_data:
                 # if address already not found and address is present in current data
                 if not new_data['address'] and 'address' in res:
