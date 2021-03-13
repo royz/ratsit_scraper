@@ -216,8 +216,8 @@ class Ratsit:
             self.cache = {}
 
     def write_cache(self):
-        # write the cache every 60 seconds
-        if time.time() < self.cache_written_at + 60:
+        # write the cache every 15 seconds
+        if time.time() < self.cache_written_at + 15:
             return
 
         with open(CACHE_PATH, 'w', encoding='utf-8') as f:
@@ -257,7 +257,7 @@ class Excel:
                 if i == 0:
                     continue
 
-                if row[1].value.strip() == '' and row[2].value.strip() == '':
+                if not row[1].value and not row[2].value:
                     break
 
                 self.input.append({
@@ -266,7 +266,7 @@ class Excel:
                     'last_name': row[2].value,
                     'person_number': row[0].value,
                 })
-        except:
+        except StopIteration:
             print('the file does not exist')
             quit()
 
