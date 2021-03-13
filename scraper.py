@@ -45,41 +45,35 @@ class Ratsit:
         if person_hash in self.cache:
             return self.cache.get(person_hash)
 
-        data = {
-            'Typ': '2',
-            'p': '1',
-            'FNamn': first_name,
-            'ENamn': last_name,
-            'PNr': person_number,
-            'Telefon': '',
-            'Gatuadress': '',
-            'PostNr': '',
-            'PostOrt': '',
-            'Kommun': '',
-            'Man': 'true',
-            'Kvinna': 'true',
-            'Relation': 'true',
-            'EjRelation': 'true',
-            'AlderFran': '',
-            'AlderTill': '',
-            'HarBolagsengagemang': 'true',
-            'HarEjBolagsengagemang': 'true',
+        params = {
+            'fnamn': first_name,
+            'enamn': last_name,
+            'gata': '',
+            'postnr': '',
+            'ort': '',
+            'kn': '',
+            'pnr': person_number,
+            'tfn': '',
+            'm': '1',
+            'k': '1',
+            'r': '1',
+            'er': '1',
+            'b': '1',
+            'eb': '1',
+            'amin': '16',
+            'amax': '120',
+            'fon': '1',
+            'typ': '2',
             'page': '1',
-            'clientQueryId': '1',
         }
         try:
-            response = self.session.post('https://www.ratsit.se/Sok/SokPersonPartial', data=data, timeout=10)
-
-            # with open('index.html', 'w', encoding='utf-8') as f:
-            #     f.write(primary.strip())
+            response = self.session.get('https://www.ratsit.se/api/search/person', params=params, timeout=10)
         except ReadTimeout:
             print('request timed out (2). retrying...')
             return self.search(first_name, last_name, person_number)
 
         try:
-            primary = response.json()['htmlPrimary']
-            soup = BeautifulSoup(primary, 'html.parser')
-            url = 'https://www.ratsit.se' + soup.find('div', {'class': 'search-list-item'}).find('a')['href']
+            url = 'https://www.ratsit.se' + response.json()['person']['list'][0]['personrapportUrl']
             return self.get_details(url, person_hash)
         except:
             return None
@@ -318,7 +312,7 @@ if __name__ == '__main__':
 
         print(colored(f'[{i + 1}/{len(excel.input)}] {person["first_name"]} '
                       f'{person["last_name"]} ({person["person_number"]}) '
-                      f''.ljust(100, '-'), 'blue'))
+                      f''.ljust(60, '-'), 'blue'))
         result = ratsit.search(
             person['first_name'],
             person['last_name'],
