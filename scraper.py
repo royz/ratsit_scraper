@@ -257,6 +257,9 @@ class Excel:
                 if i == 0:
                     continue
 
+                if row[1].value.strip() == '' and row[2].value.strip() == '':
+                    break
+
                 self.input.append({
                     'row': i,
                     'first_name': row[1].value,
